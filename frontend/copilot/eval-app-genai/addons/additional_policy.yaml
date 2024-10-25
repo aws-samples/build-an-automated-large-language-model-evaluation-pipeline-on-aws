@@ -1,11 +1,11 @@
 # Your additional_policy.yml
 Parameters:
-    App:
-        Type: String
-    Env:
-        Type: String
-    Name:
-        Type: String
+  App:
+    Type: String
+  Env:
+    Type: String
+  Name:
+    Type: String
 
 Resources:
   MyPolicy:
@@ -16,10 +16,17 @@ Resources:
         Statement:
           - Sid: AccessBedrock
             Effect: Allow
-            Action: 
+            Action:
               - bedrock:*
-            Resource: "*"
+            Resource: '*'
+          - Sid: AccessS3
+            Effect: Allow
+            Action:
+              - s3:*
+            Resource: '*'
+
 Outputs:
-  MyPolicyArn: # Result: "MyPolicy" will be added to the task role, granting it access to the said services.
-    Description: "The ARN of the ManagedPolicy to attach to the task role."
+  MyPolicyArn:
+    # Result: "MyPolicy" will be added to the task role, granting it access to the said services.
+    Description: The ARN of the ManagedPolicy to attach to the task role.
     Value: !Ref MyPolicy
