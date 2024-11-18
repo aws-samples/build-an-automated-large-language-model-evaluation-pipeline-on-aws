@@ -635,22 +635,6 @@ Resources:
         WriteCapacityUnits: "5"
       TableName: "SolutionTableDDB"
 
-  APILayerDDB:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        -
-          AttributeName: "model_id"
-          AttributeType: "S"
-      KeySchema:
-        -
-          AttributeName: "model_id"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: "5"
-        WriteCapacityUnits: "5"
-      TableName: "api-layer-ddb"
-
 
   ResultDatabase:
     Type: AWS::Glue::Database

@@ -158,5 +158,4 @@ echo "putting sample document to knowledge base..."
 aws s3 cp ../evaluation_artifacts/Amazon_SageMaker_Developer_Guide.pdf s3://bedrock-kb-$ACCOUNT_ID-$REGION/knowledgesource/
 
 echo "sync the data via data source sync"
-# aws bedrock-agent start-ingestion-job --knowledge-base-id $KNOWLEDGE_BASE_WITH_AOSS --data-source-id $KNOWLEDGE_BASE_DATA_SOURCE --region $REGION
-
+aws bedrock-agent start-ingestion-job --knowledge-base-id $KNOWLEDGE_BASE_WITH_AOSS --data-source-id $KNOWLEDGE_BASE_DATA_SOURCE --region $REGION
