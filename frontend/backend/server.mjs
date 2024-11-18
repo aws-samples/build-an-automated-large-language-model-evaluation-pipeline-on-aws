@@ -249,10 +249,11 @@ app.post("/save_prompt", async (req, res) => {
   try {
     const response = await client.send(command);
     const promptVersionCommand = new CreatePromptVersionCommand({
-      promptIdentifier: response["id"],
+      promptIdentifier: response.id,
+      description: response.description ?? ""
     });
-    const promptVersionResponse = client.send(promptVersionCommand);
-    res.status(200).send({ id: response["id"] });
+    const promptVersionResponse = await client.send(promptVersionCommand);
+    res.status(200).send({ id: response.id });
   } catch (err) {
     res.status(500).send({ id: `ERROR: ${err}` });
     console.log(err);
@@ -353,10 +354,11 @@ app.post("/update_prompt", async (req, res) => {
   try {
     const response = await client.send(command);
     const promptVersionCommand = new CreatePromptVersionCommand({
-      promptIdentifier: response["id"],
+      promptIdentifier: response.id,
+      description: response.description ?? ""
     });
-    const promptVersionResponse = client.send(promptVersionCommand);
-    res.status(200).send({ id: response["id"] });
+    const promptVersionResponse = await client.send(promptVersionCommand);
+    res.status(200).send({ id: response.id });
   } catch (err) {
     res.status(500).send({ id: `ERROR: ${err}` });
     console.log(err);

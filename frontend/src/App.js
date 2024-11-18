@@ -194,8 +194,8 @@ function App() {
   async function uploadS3(data) {
     const formData = new FormData();
     formData.append("file", data);
-    formData.append("bucketName", s3bucket);
-    formData.append("keyName", s3bucketFile);
+    formData.append("bucketName", s3bucket.trim());
+    formData.append("keyName", s3bucketFile.trim());
     formData.append("region", region);
     try {
       const response = await fetch(`${API_URL}/upload`, {
