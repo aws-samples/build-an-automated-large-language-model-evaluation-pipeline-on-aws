@@ -12,18 +12,20 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       PolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Sid: AccessBedrock
             Effect: Allow
             Action:
               - bedrock:*
-            Resource: '*'
+            Resource: "*"
           - Sid: AccessS3
             Effect: Allow
             Action:
               - s3:*
-            Resource: '*'
+            Resource:
+              - arn:aws:s3:::*
+              - arn:aws:s3:::*/*
 
 Outputs:
   MyPolicyArn:

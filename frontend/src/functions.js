@@ -113,11 +113,12 @@ export async function invokeLLM(
   selectedModel,
   modelMap,
   s3bucket,
+  s3FileName,
   setdialogMessage,
   setshowDialog,
   setinvokeARN,
   isChecked,
-  selectedPromptId
+  selectedPromptId,
 ) {
   const url = URL; // Replace with the actual URL
 
@@ -139,11 +140,11 @@ export async function invokeLLM(
     model_family: "bedrock",
     model_name: modelMap[selectedModel],
     question_bucket: s3bucket,
-    question_key: "question/evaluation_prompt.csv",
+    question_key: s3FileName,
     method: method,
-    prompt_id: selectedPromptId !== "" ? selectedPromptId : null
-    
+    prompt_id: selectedPromptId !== "" ? selectedPromptId : null,
   };
+  console.log(payload);
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -188,6 +189,7 @@ export const runEvaluation = async (
   s3bucket,
   invokeARN,
   selectedMetrics,
+  evaluationFileLocation,
 ) => {
   // This link is to monitor the state of the step functions
   const LinkURL =
@@ -202,12 +204,13 @@ export const runEvaluation = async (
     operation: "evaluate",
     evaluation_model_family: "bedrock",
     evaluation_model_name: modelMap[selectedModel],
-    evaluation_location:
-      "s3://" +
-      s3bucket +
-      "/invoke_successful_result/jsonline/" +
-      invokeARN +
-      "/result.jsonl",
+    evaluation_location: evaluationFileLocation,
+    // evaluation_location:
+    //   "s3://" +
+    //   s3bucket +
+    //   "/invoke_successful_result/jsonline/" +
+    //   invokeARN +
+    //   "/result.jsonl",
     instance_type: "ml.m5.xlarge",
     evaluation_metrics: selectedMetrics.map((key) => evaluationMetricsMap[key]),
     method: "ragaseval",

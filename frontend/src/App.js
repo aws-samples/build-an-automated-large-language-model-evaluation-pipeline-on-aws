@@ -21,8 +21,6 @@ import {
 } from "./functions";
 import { CustomDrawer } from "./drawer";
 import { createTheme, ThemeProvider, styled } from "@mui/material/styles";
-import { Input, inputClasses } from "@mui/base";
-import { useFormControlContext } from "@mui/base/FormControl";
 
 import {
   CssBaseline,
@@ -100,9 +98,9 @@ function App() {
   const [region, setRegion] = useState("us-west-2");
   const [availableModels, setAvailableModels] = useState([]);
   const [modelMap, setModelMap] = useState({});
-  const [s3bucket, sets3bucket] = useState(
-    "llm-evaluation-713881807885-us-west-2",
-  );
+  const [s3bucket, sets3bucket] = useState("");
+  const [s3bucketFile, sets3bucketFile] = useState("");
+
   const [snackBarOpen, setsnackBarOpen] = useState(false);
   const [snackbarMessage, setsnackbarMessage] = useState("");
   const [showDialog, setshowDialog] = useState(false);
@@ -121,6 +119,7 @@ function App() {
   const [selectedPrompt, setSelectedPrompt] = useState("");
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [batchGenerationPromptId, setBatchGenerationPromptId] = useState("");
+  const [evaluationFileLocation, setEvaluationFileLocation] = useState("");
 
   const StopSequences = () => {
     const handleAdd = () => {
@@ -196,7 +195,7 @@ function App() {
     const formData = new FormData();
     formData.append("file", data);
     formData.append("bucketName", s3bucket);
-    formData.append("keyName", "question/evaluation_prompt.csv");
+    formData.append("keyName", s3bucketFile);
     formData.append("region", region);
     try {
       const response = await fetch(`${API_URL}/upload`, {
@@ -205,8 +204,7 @@ function App() {
       });
       // const data = await response.json();
       if (response.ok) {
-        // alert('File uploaded successfully!');
-        setsnackbarMessage("File Upload Successfull!");
+        setsnackbarMessage("File Upload Successful!");
         setsnackBarOpen(true);
       } else {
         setsnackbarMessage("File Upload Failed!");
@@ -303,10 +301,9 @@ function App() {
         {CustomDrawer(
           region,
           setRegion,
-          s3bucket,
-          sets3bucket,
           regions,
           setModelMap,
+          setPrompts,
           setAvailableModels,
           setdialogMessage,
           setshowDialog,
@@ -756,16 +753,34 @@ function App() {
                 sx={{ marginLeft: 0, align: "left" }}
               />
             </Grid>
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                label="S3 Bucket Name"
+                onChange={(e) => sets3bucket(e.target.value)}
+              ></TextField>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                label="Data file"
+                onChange={(e) => sets3bucketFile(e.target.value)}
+              ></TextField>
+            </Grid>
           </Grid>
           {/* </Box> */}
 
           <Box mt={2}>
             <input
+              key={Date.now()} // Add key to force re-render
               accept=".csv"
               style={{ display: "none" }}
               id="raised-button-file"
               type="file"
-              onChange={(e) => uploadS3(e.target.files[0])}
+              onChange={(e) => {
+                uploadS3(e.target.files[0]);
+                e.target.value = null; // Reset file input
+              }}
             />
             <label htmlFor="raised-button-file">
               <div style={{ height: "10px" }} />
@@ -798,11 +813,12 @@ function App() {
                 selectedModel,
                 modelMap,
                 s3bucket,
+                s3bucketFile,
                 setdialogMessage,
                 setshowDialog,
                 setinvokeARN,
                 isChecked,
-                batchGenerationPromptId
+                batchGenerationPromptId,
               );
             }}
           >
@@ -862,7 +878,14 @@ function App() {
               {/* Metrics */}
             </InputLabel>
           </Box>
-
+          <TextField
+            variant="outlined"
+            size="small"
+            fullWidth
+            onChange={(e) => setEvaluationFileLocation(e.target.value)}
+            placeholder="Evaluation File Location"
+            sx={{ marginBottom: "10px" }}
+          />
           <Button
             component="span"
             variant="contained"
@@ -878,6 +901,7 @@ function App() {
                 s3bucket,
                 invokeARN,
                 selectedMetrics,
+                evaluationFileLocation,
               );
             }}
           >

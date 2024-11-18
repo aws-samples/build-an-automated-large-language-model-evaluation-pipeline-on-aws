@@ -6,9 +6,8 @@ This is a simple React app designed to be used with (AWS gen AI evaluation pipel
 
 1. Make sure Docker is installed and running
 2. For local deployments, make sure aws credentials are available in `~/.aws/credentials`
-3. For cloud deployment, we will use aws [copilot-cli](https://github.com/aws/copilot-cli/) to deploy the app in Fargate. Copilot CLI is a tool for developers to build, release and operate production-ready containerized applications on AWS App Runner or Amazon ECS on AWS Fargate. Install aws [copilot-cli](https://github.com/aws/copilot-cli/) using `brew install aws/tap/copilot-cli` using homebrew. For other installation options, check the copilot-cli github repo. 
+3. For cloud deployment, we will use aws [copilot-cli](https://github.com/aws/copilot-cli/) to deploy the app in Fargate. Copilot CLI is a tool for developers to build, release and operate production-ready containerized applications on AWS App Runner or Amazon ECS on AWS Fargate. Install aws [copilot-cli](https://github.com/aws/copilot-cli/) using `brew install aws/tap/copilot-cli` using homebrew. For other installation options, check the copilot-cli github repo.
 4. Copy the `.env-example` file to `.env` file in the project root directory. Replace the value of `REACT_APP_BACKEND_API_HOST` with the URL of the backend evaluation API
-
 
 ### Running the app locally
 
