@@ -1,6 +1,6 @@
 import {
   BedrockRuntimeClient,
-  ConverseCommand
+  ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import {
   BedrockClient,
@@ -15,10 +15,11 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   BedrockAgentClient,
   CreatePromptCommand,
+  CreatePromptVersionCommand,
   GetPromptCommand,
   ListPromptsCommand,
   UpdatePromptCommand,
-  ConflictException
+  ConflictException,
 } from "@aws-sdk/client-bedrock-agent"; // ES Modules import
 
 // Handle uncaught exceptions globally
@@ -100,16 +101,15 @@ app.get("/models", async (req, res) => {
   }
 });
 
-
 app.get("/get_prompt", async (req, res) => {
-
   const region = req.query.region;
 
   const client = new BedrockAgentClient({
     region: region,
   });
 
-  const input = { // ListPromptsRequest
+  const input = {
+    // ListPromptsRequest
     // promptIdentifier: "STRING_VALUE",
     maxResults: 100,
     // nextToken: "STRING_VALUE",
@@ -117,47 +117,45 @@ app.get("/get_prompt", async (req, res) => {
 
   const command = new ListPromptsCommand(input);
   try {
-  const response = await client.send(command);
-  console.log(response)
-  res.status(200).send(response["promptSummaries"]);
+    const response = await client.send(command);
+    console.log(response);
+    res.status(200).send(response["promptSummaries"]);
   } catch (err) {
     console.log(err);
     res.status(500).send(err);
   }
 
   // console.log(response)
-
 });
 
-
-
 app.get("/get_prompt_by_id", async (req, res) => {
-
   const id = req.query.id;
   const region = req.query.region;
-  console.log(region)
+  console.log(region);
 
   const client = new BedrockAgentClient({
     region: region,
   });
 
-  const input = { // ListPromptsRequest
+  const input = {
+    // ListPromptsRequest
     promptIdentifier: id,
     // nextToken: "STRING_VALUE",
   };
 
-  console.log(input)
+  console.log(input);
   const command = new GetPromptCommand(input);
   try {
-  const response = await client.send(command);
-  console.log(response)
-  res.status(200).send(response);
+    const response = await client.send(command);
+    console.log(response["variants"][0]["inferenceConfiguration"]);
+    console.log(response["variants"][0]["templateConfiguration"]);
+
+    console.log(response);
+    res.status(200).send(response);
   } catch (err) {
     console.log(err);
     res.status(500).send(err);
   }
-
-
 });
 
 app.post("/save_prompt", async (req, res) => {
@@ -246,18 +244,21 @@ app.post("/save_prompt", async (req, res) => {
     };
   }
 
-  console.log(input)
+  console.log(input);
   const command = new CreatePromptCommand(input);
   try {
     const response = await client.send(command);
-    res.status(200).send({ id: response["id"] });
+    const promptVersionCommand = new CreatePromptVersionCommand({
+      promptIdentifier: response.id,
+      description: response.description ?? ""
+    });
+    const promptVersionResponse = await client.send(promptVersionCommand);
+    res.status(200).send({ id: response.id });
   } catch (err) {
-
     res.status(500).send({ id: `ERROR: ${err}` });
     console.log(err);
   }
 });
-
 
 app.post("/update_prompt", async (req, res) => {
   const data = req.body;
@@ -273,7 +274,7 @@ app.post("/update_prompt", async (req, res) => {
   const max_tokens = parseInt(data["max_tokens"]);
   const stop_sequences = data["stop_sequences"];
   const modelId = data["model_id"];
-  const promptIdentifier  = data["prompt_identifier"];
+  const promptIdentifier = data["prompt_identifier"];
 
   const client = new BedrockAgentClient({
     region: region,
@@ -348,13 +349,17 @@ app.post("/update_prompt", async (req, res) => {
     };
   }
 
-  console.log(input)
+  console.log(input);
   const command = new UpdatePromptCommand(input);
   try {
     const response = await client.send(command);
-    res.status(200).send({ id: response["id"] });
+    const promptVersionCommand = new CreatePromptVersionCommand({
+      promptIdentifier: response.id,
+      description: response.description ?? ""
+    });
+    const promptVersionResponse = await client.send(promptVersionCommand);
+    res.status(200).send({ id: response.id });
   } catch (err) {
-
     res.status(500).send({ id: `ERROR: ${err}` });
     console.log(err);
   }

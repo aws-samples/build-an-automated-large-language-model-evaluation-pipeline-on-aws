@@ -8,15 +8,14 @@ import { TextField, MenuItem, InputLabel, FormControl } from "@mui/material";
 import Box from "@mui/material/Box";
 import Select from "@mui/material/Select";
 
-import { getModels } from "./functions";
+import { getModels, getPrompts } from "./functions";
 
 export function CustomDrawer(
   region,
   setRegion,
-  s3bucket,
-  sets3bucket,
   regions,
   setModelMap,
+  setPrompts,
   setAvailableModels,
   setdialogMessage,
   setshowDialog,
@@ -26,7 +25,6 @@ export function CustomDrawer(
   const [selectValue, setSelectValue] = useState("");
 
   const handleToggleDrawer = (open) => {
-    setTextFieldValue(s3bucket);
     setSelectValue(region);
     setDrawerOpen(open);
   };
@@ -41,7 +39,6 @@ export function CustomDrawer(
 
   const handleBackdropClick = () => {
     setDrawerOpen(false);
-    sets3bucket(textFieldValue);
     setRegion(selectValue);
     if (selectValue.length !== 0) {
       getModels(
@@ -51,6 +48,8 @@ export function CustomDrawer(
         setdialogMessage,
         setshowDialog,
       );
+
+      getPrompts(selectValue, setPrompts, setdialogMessage, setshowDialog);
     }
   };
 
@@ -104,16 +103,7 @@ export function CustomDrawer(
               fullWidth
               style={{ marginBottom: "20px" }}
               variant="standard"
-            >
-              <TextField
-                fullWidth
-                margin="normal"
-                label="S3 Bucket"
-                variant="standard"
-                value={textFieldValue}
-                onChange={handleTextFieldChange}
-              />
-            </FormControl>
+            ></FormControl>
           </Box>
         </div>
       </Drawer>

@@ -7,14 +7,15 @@ name: eval-app-genai
 type: Load Balanced Web Service
 
 nlb:
-  port: 3000/tcp              # Traffic on port 8080/tcp is forwarded to the main container, on port 8080.
-  additional_listeners:  
-    - port: 5000/tcp          # Traffic on port 8084/tcp is forwarded to the main container, on port 8084.
+  port: 3000/tcp # Traffic on port 8080/tcp is forwarded to the main container, on port 8080.
+  additional_listeners:
+    - port: 5000/tcp # Traffic on port 8084/tcp is forwarded to the main container, on port 8084.
     - port: 80/tcp
       target_port: 3000
-      
+
 # Distribute traffic to your service.
-http: false
+http:
+  false
   # Requests to this path will be forwarded to your service.
   # To match all requests you can use the "/" path.
   # path: '/'
@@ -32,11 +33,11 @@ image:
   # Port exposed through your container to route traffic to it.
   port: 3000
 
-cpu: 256       # Number of CPU units for the task.
-memory: 512    # Amount of memory in MiB used by the task.
-platform: linux/x86_64  # See https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/#platform
-count: 1       # Number of tasks that should be running in your service.
-exec: true     # Enable running commands in your container.
+cpu: 256 # Number of CPU units for the task.
+memory: 512 # Amount of memory in MiB used by the task.
+platform: linux/x86_64 # See https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/#platform
+count: 1 # Number of tasks that should be running in your service.
+exec: true # Enable running commands in your container.
 network:
   connect: true # Enable Service Connect for intra-environment traffic between services.
 
