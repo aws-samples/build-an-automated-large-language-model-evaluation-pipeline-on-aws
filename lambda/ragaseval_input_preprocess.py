@@ -102,12 +102,3 @@ def object_exists(s3_client, bucket, key):
     except s3_client.exceptions.ClientError as e:
         return False
 
-
-
-print("test")
-event = {
-    "evaluation_metrics": ["faithfulness", "answer_relevancy"],
-    "evaluation_model_name": "test_model",
-    "evaluation_location": "s3://llm-evaluation-713881807885-us-west-2/invoke_successful_result/jsonline/6ad08519-72bc-4d3d-ae73-96d128efa9a8/result.jsonl"
-}
-lambda_handler(event, None)

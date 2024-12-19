@@ -580,6 +580,11 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: Prod
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+        AllowOrigin: "'*'"
+        MaxAge: "'300'"
 
 
   RESTAPIStartSFLambda:
@@ -634,23 +639,6 @@ Resources:
         ReadCapacityUnits: "5"
         WriteCapacityUnits: "5"
       TableName: "SolutionTableDDB"
-
-  APILayerDDB:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        -
-          AttributeName: "model_id"
-          AttributeType: "S"
-      KeySchema:
-        -
-          AttributeName: "model_id"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: "5"
-        WriteCapacityUnits: "5"
-      TableName: "api-layer-ddb"
-
 
   ResultDatabase:
     Type: AWS::Glue::Database
@@ -1188,4 +1176,14 @@ Outputs:
     Value: !Sub "https://${RESTAPIStartSF}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
     Export:
       Name: !Sub "${AWS::StackName}-APIGatewayEndpoint"
+  KnowledgeBaseWithAoss:
+    Description: "KnowledgeBase with aoss"
+    Value: !Ref KnowledgeBaseWithAoss
+    Export:
+      Name: !Sub "KnowledgeBaseWithAoss"
+  KnowledgeBaseDataSource:
+    Description: "KnowledgeBaseDataSource"
+    Value: !GetAtt KnowledgeBaseDataSource.DataSourceId
+    Export:
+      Name: !Sub "KnowledgeBaseDataSource"
 
