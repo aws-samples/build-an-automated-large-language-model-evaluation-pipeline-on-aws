@@ -3,6 +3,7 @@ import boto3
 from requests_aws4auth import AWS4Auth
 import requests
 import cfnresponse
+import time
 
 hostname = os.environ['OPENSEARCH_HOSTNAME']
 index_name = os.environ['OPENSEARCH_INDEX_NAME']
@@ -56,6 +57,7 @@ def lambda_handler(event, context):
             response = requests.put(url, auth=awsauth, json=document, headers=headers)
             print(response.raise_for_status())
             if response.status_code == 200:
+                time.sleep(30)
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
         elif request_type == 'Delete':
             cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
