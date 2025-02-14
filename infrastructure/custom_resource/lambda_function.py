@@ -24,6 +24,8 @@ KNN_SETTINGS = {
 hostname = os.environ['OPENSEARCH_HOSTNAME']
 index_name = os.environ['OPENSEARCH_INDEX_NAME']
 embedding_model = os.environ['EMBEDDING_MODEL']
+# If you are going to increase the index wait for ready value, make sure to adjust the lambda timeout value accordingly
+index_wait_for_ready = os.environ.get('INDEX_WAIT_FOR_READY', 30)
 
 # Model dimensions mapping
 embedding_context_dimensions = {
@@ -67,35 +69,6 @@ def get_index_document(embedding_dimension):
         }
     }
 
-def check_index_status(url, awsauth, headers, max_retries=6, delay=5):
-    """
-    Check index status with retry logic
-    Returns True if index is ready, False otherwise
-    """
-    for attempt in range(max_retries):
-        try:
-            # Use HEAD request to check if index exists and is accessible
-            response = requests.head(
-                url,
-                auth=awsauth,
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                logger.info(f"Index is ready after attempt {attempt + 1}")
-                return True
-                
-            logger.info(f"Index not ready yet (attempt {attempt + 1}/{max_retries})")
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-                
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"Error checking index status (attempt {attempt + 1}/{max_retries}): {str(e)}")
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-                
-    return False
-
 def create_index(url, auth, document, headers, max_retries=5, initial_delay=1):
     """
     Create index with exponential backoff retry logic
@@ -115,9 +88,9 @@ def create_index(url, auth, document, headers, max_retries=5, initial_delay=1):
             response.raise_for_status()
             logger.info(f"Index creation initiated with status code: {response.status_code}")
             
-            # Wait for index to be ready with retries
-            if not check_index_status(url, auth, headers):
-                raise TimeoutError("Index did not become ready within the expected time")         
+            # Wait for index to be ready - it can take a few seconds for the index to be ready (a get or head request on the index does not work)
+            # If you know of a reliable and programmatic way to check for index to be ready, please raise a PR
+            time.sleep(index_wait_for_ready)         
             
             return response
             
