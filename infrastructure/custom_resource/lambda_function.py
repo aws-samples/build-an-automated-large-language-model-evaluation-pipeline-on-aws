@@ -67,31 +67,34 @@ def get_index_document(embedding_dimension):
         }
     }
 
-def wait_for_index(url, auth, headers, max_retries=12, delay_seconds=5):
+def check_index_status(url, awsauth, headers, max_retries=6, delay=5):
     """
-    Wait for index to be ready by directly checking the index
+    Check index status with retry logic
+    Returns True if index is ready, False otherwise
     """
     for attempt in range(max_retries):
         try:
-            # Try to get the index directly
-            response = requests.get(url, auth=auth, headers=headers)
+            # Use HEAD request to check if index exists and is accessible
+            response = requests.head(
+                url,
+                auth=awsauth,
+                headers=headers
+            )
             
             if response.status_code == 200:
-                logger.info("Index is ready and accessible")
+                logger.info(f"Index is ready after attempt {attempt + 1}")
                 return True
-            
-            logger.info(f"Index not ready yet. Status {response.status_code}. Attempt {attempt + 1}/{max_retries}")
-            time.sleep(delay_seconds)
-            
-        except RequestException as e:
-            if attempt == max_retries - 1:
-                logger.error(f"Failed to verify index after {max_retries} attempts: {str(e)}")
-                raise
                 
-            logger.warning(f"Error checking index: {str(e)}. Attempt {attempt + 1}/{max_retries}")
-            time.sleep(delay_seconds)
-            
-    raise TimeoutError(f"Index did not become ready after {max_retries * delay_seconds} seconds")
+            logger.info(f"Index not ready yet (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+                
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Error checking index status (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+                
+    return False
 
 def create_index(url, auth, document, headers, max_retries=5, initial_delay=1):
     """
@@ -112,8 +115,9 @@ def create_index(url, auth, document, headers, max_retries=5, initial_delay=1):
             response.raise_for_status()
             logger.info(f"Index creation initiated with status code: {response.status_code}")
             
-            # Wait for index to be ready
-            wait_for_index(url, auth, headers)
+            # Wait for index to be ready with retries
+            if not check_index_status(url, auth, headers):
+                raise TimeoutError("Index did not become ready within the expected time")         
             
             return response
             
