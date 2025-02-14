@@ -24,8 +24,6 @@ KNN_SETTINGS = {
 hostname = os.environ['OPENSEARCH_HOSTNAME']
 index_name = os.environ['OPENSEARCH_INDEX_NAME']
 embedding_model = os.environ['EMBEDDING_MODEL']
-# If you are going to increase the index wait for ready value, make sure to adjust the lambda timeout value accordingly
-index_wait_for_ready = os.environ.get('INDEX_WAIT_FOR_READY', 30)
 
 # Model dimensions mapping
 embedding_context_dimensions = {
