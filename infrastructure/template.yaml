@@ -41,8 +41,23 @@ Resources:
               Service: sagemaker.amazonaws.com
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
-        # narrow down
+        # TODO narrow down
         - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess'
+        - 'arn:aws:iam::aws:policy/service-role/AmazonSageMakerServiceCatalogProductsExecutionRole'
+          # - 'arn:aws:iam::aws:policy/AdministratorAccess'
+  # A role for the containers
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ '', [ !Ref ProjectName, TaskRole ] ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
