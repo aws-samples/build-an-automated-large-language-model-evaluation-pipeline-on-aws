@@ -18,4 +18,9 @@ RUN npm run build
 
 EXPOSE 3000 5000
 
+# Add health check (checking both services)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/ || exit 1 && \
+      curl -f http://localhost:5000/ || exit 1
+
 USER appuser CMD ["bash", "/app/start_servers.sh"]
