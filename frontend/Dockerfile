@@ -1,7 +1,7 @@
 FROM node:18.20
 
 # Create non-root user and group
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -r -g -m appuser appuser
 
 WORKDIR /app
 
@@ -23,4 +23,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/ || exit 1 && \
       curl -f http://localhost:5000/ || exit 1
 
-USER appuser CMD ["bash", "/app/start_servers.sh"]
+CMD ["bash", "/app/start_servers.sh"]
