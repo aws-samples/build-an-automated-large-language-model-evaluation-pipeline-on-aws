@@ -41,31 +41,20 @@ Resources:
               Service: sagemaker.amazonaws.com
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
-        # TODO narrow down
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
-  # A role for the containers
-  TaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Join [ '', [ !Ref ProjectName, TaskRole ] ]
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: 'sts:AssumeRole'
+        - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
       Policies:
-        - PolicyName: "SageMakerInvokePermissions"
+        - PolicyName: S3Access
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: '2012-10-17'
             Statement:
-              - Effect: "Allow"
+              - Effect: Allow
                 Action:
-                  - "sagemaker:InvokeEndpoint"
-                  - "s3:*"
-                  - "dynamodb:GetItem"
-                  - "bedrock:*"
-                Resource: "*"
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                  - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   EvaluationBucket:
     Type: 'AWS::S3::Bucket'
@@ -93,8 +82,16 @@ Resources:
               - Effect: Allow
                 Action:
                   - "lambda:InvokeFunction"
-                # TODO: narrow down
-                Resource: "*"
+                Resource:
+                  - !GetAtt InvokeLLM.Arn
+                  - !GetAtt ConvertToJson.Arn
+                  - !GetAtt InvokeResultSummary.Arn
+                  - !GetAtt EvaluateLLM.Arn
+                  - !GetAtt ValidateLLMEvaluateInput.Arn
+                  - !GetAtt FMEvalValidationInput.Arn
+                  - !GetAtt EvaluateMetric.Arn
+                  - !GetAtt REGASLambdaEvaluation.Arn
+                  - !GetAtt REGASLambdaEvaluationPreprocess.Arn
         - PolicyName: StatesLogPolicy
           PolicyDocument:
             Version: "2012-10-17"
@@ -121,6 +118,7 @@ Resources:
                   - s3:*Object
                 Resource:
                   - !Sub  "arn:aws:s3:::${EvaluationBucket}/*"
+
   InvokeLLMStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
@@ -359,6 +357,7 @@ Resources:
             RAGASEvalStepFunctionsArn: !GetAtt EvaluateLLMStateMachineRAGAS.Arn
           }
       RoleArn: !GetAtt LLMIEvaluationStatesExecutionRole.Arn
+
   InvokeLLM:
     Type: AWS::Serverless::Function
     Properties:
@@ -384,11 +383,24 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
-                - sagemaker:*
-              Resource: "*"
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sagemaker:InvokeEndpoint
+              Resource: '*'
+
   InvokeResultSummary:
     Type: AWS::Serverless::Function
     Properties:
@@ -409,9 +421,12 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-              Resource: "*"
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   EvaluateLLM:
     Type: AWS::Serverless::Function
@@ -439,19 +454,41 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
-                - sagemaker:*
                 - dynamodb:GetItem
                 - dynamodb:Query
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sagemaker:InvokeEndpoint
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
-              Resource: "*"
-
+              Resource: 
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${ResultDatabase}'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${ResultDatabase}/*'
 
   EvaluateMetric:
     Type: AWS::Serverless::Function
@@ -475,13 +512,28 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
-                - sagemaker:*
                 - dynamodb:GetItem
                 - dynamodb:Query
-              Resource: "*"
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sagemaker:CreateTrainingJob
+                - sagemaker:DescribeTrainingJob
+              Resource: !Sub 'arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:training-job/*'
 
   ConvertToJson:
     Type: AWS::Serverless::Function
@@ -496,13 +548,6 @@ Resources:
         - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python310:20
       Policies:
         - AWSLambdaExecute
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                # TODO narrow down
-                - logs:*
-              Resource: "*"
 
   ValidateLLMEvaluateInput:
     Type: AWS::Serverless::Function
@@ -519,11 +564,18 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
                 - dynamodb:GetItem
                 - dynamodb:Query
-              Resource: "*"
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   FMEvalValidationInput:
     Type: AWS::Serverless::Function
@@ -540,11 +592,18 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
                 - dynamodb:GetItem
                 - dynamodb:Query
-              Resource: "*"
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   EvaluationResultSummary:
     Type: AWS::Serverless::Function
@@ -567,14 +626,23 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+            - Effect: Allow
+              Action:
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
-              Resource: "*"
+              Resource: 
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${ResultDatabase}'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${ResultDatabase}/*'
 
   RESTAPIStartSF:
     Type: AWS::Serverless::Api
@@ -639,6 +707,7 @@ Resources:
         ReadCapacityUnits: "5"
         WriteCapacityUnits: "5"
       TableName: "SolutionTableDDB"
+
 
   ResultDatabase:
     Type: AWS::Glue::Database
@@ -1157,11 +1226,16 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
                 # TODO narrow down
                 - s3:*
                 - bedrock:*
-                - dynamodb:GetItem
-                - dynamodb:Query
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
