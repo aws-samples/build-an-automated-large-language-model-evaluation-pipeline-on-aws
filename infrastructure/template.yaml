@@ -258,8 +258,6 @@ Resources:
               Service:
                 - !Sub states.${AWS::Region}.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
       Path: "/"
       Policies:
         - PolicyName: LambdaExecutionPolicy
@@ -270,7 +268,6 @@ Resources:
                 Action:
                   - "lambda:InvokeFunction"
                   - "states:*"
-                  - "iam:*"
                 Resource: "*"
         - PolicyName: StatesLogPolicy
           PolicyDocument:
@@ -1233,15 +1230,27 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
-              Resource: "*"
+              Resource:
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${ResultDatabase}'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${ResultDatabase}/*'
 
 
 Outputs:
