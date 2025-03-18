@@ -41,6 +41,7 @@ Resources:
               Service: sagemaker.amazonaws.com
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
+        # narrow down
         - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
       Policies:
         - PolicyName: S3Access
@@ -267,7 +268,18 @@ Resources:
               - Effect: Allow
                 Action:
                   - "lambda:InvokeFunction"
-                  - "states:*"
+                Resource:
+                  - !GetAtt EvaluateLLM.Arn
+                  - !GetAtt ValidateLLMEvaluateInput.Arn
+                  - !GetAtt FMEvalValidationInput.Arn
+                  - !GetAtt EvaluateMetric.Arn
+                  - !GetAtt REGASLambdaEvaluation.Arn
+                  - !GetAtt REGASLambdaEvaluationPreprocess.Arn
+              - Effect: Allow
+                Action:
+                  - "states:StartExecution"
+                  - "states:DescribeExecution"
+                  - "states:StopExecution"
                 Resource: "*"
         - PolicyName: StatesLogPolicy
           PolicyDocument:
@@ -285,10 +297,15 @@ Resources:
                   - logs:DescribeResourcePolicies
                   - logs:DescribeLogGroups
                   - logs:CreateLogGroup
-                Resource: "*"
+                Resource: 
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-LLM*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-LLMEval*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-FMEval*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-RAGASEval*:*"
 
   EvaluateLLMStateMachine:
     Type: AWS::StepFunctions::StateMachine
+    DependsOn: [LLMEvalStateMachine, FMEvalStateMachine, EvaluateLLMStateMachineRAGAS]
     Properties:
       StateMachineName: Evaluate-LLM
       DefinitionString:
@@ -308,7 +325,7 @@ Resources:
                           "Type": "Task",
                           "Resource": "arn:aws:states:::states:startExecution.sync:2",
                           "Parameters": {
-                            "StateMachineArn": "${RAGASEvalStepFunctionsArn}",
+                            "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-RAGASEval",
                             "Input.$": "$"
                           },
                           "End": true
@@ -322,7 +339,7 @@ Resources:
                           "Type": "Task",
                           "Resource": "arn:aws:states:::states:startExecution.sync:2",
                           "Parameters": {
-                            "StateMachineArn": "${LLMEvalStepFunctionsArn}",
+                            "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-LLMEval",
                             "Input.$": "$"
                           },
                           "End": true
@@ -336,7 +353,7 @@ Resources:
                           "Type": "Task",
                           "Resource": "arn:aws:states:::states:startExecution.sync:2",
                           "Parameters": {
-                            "StateMachineArn": "${FMEvalStepFunctionsArn}",
+                            "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-FMEval",
                             "Input.$": "$"
                           },
                           "End": true
@@ -348,11 +365,7 @@ Resources:
                 }
               }
             }
-          - {
-            LLMEvalStepFunctionsArn: !GetAtt LLMEvalStateMachine.Arn,
-            FMEvalStepFunctionsArn: !GetAtt FMEvalStateMachine.Arn,
-            RAGASEvalStepFunctionsArn: !GetAtt EvaluateLLMStateMachineRAGAS.Arn
-          }
+          - {}
       RoleArn: !GetAtt LLMIEvaluationStatesExecutionRole.Arn
 
   InvokeLLM:
@@ -654,6 +667,7 @@ Resources:
 
   RESTAPIStartSFLambda:
     Type: AWS::Serverless::Function
+    DependsOn: [InvokeLLMStateMachine, EvaluateLLMStateMachine]
     Properties:
       FunctionName: llm_eval_solution_start_sf
       Handler: start_sf.lambda_handler
@@ -663,8 +677,8 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
-          INVOKE_STATE_MACHINE_ARN: !Ref InvokeLLMStateMachine
-          EVALUATE_STATE_MACHINE_ARN: !Ref EvaluateLLMStateMachine
+          INVOKE_STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Invoke-LLM"
+          EVALUATE_STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-LLM"
       Policies:
         - AWSLambdaExecute
         - Version: '2012-10-17'
@@ -673,8 +687,8 @@ Resources:
               Action:
                 - states:StartExecution
               Resource:
-                - !Ref InvokeLLMStateMachine
-                - !Ref EvaluateLLMStateMachine
+                - !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Invoke-LLM"
+                - !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-LLM"
       Events:
         ApiEvent:
           Type: Api
@@ -736,7 +750,6 @@ Resources:
           KB_ID: !Ref KnowledgeBaseWithAoss
       Policies:
         - AWSLambdaBasicExecutionRole
-        - AmazonS3FullAccess
         - AmazonBedrockFullAccess
         - Version: '2012-10-17'
           Statement:
@@ -748,6 +761,17 @@ Resources:
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+                - s3:HeadObject
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}/*'
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python310:20
 
@@ -771,8 +795,6 @@ Resources:
           KB_ID: !Ref KnowledgeBaseWithAoss
       Policies:
         - AWSLambdaBasicExecutionRole
-        - AmazonS3FullAccess
-        - AmazonBedrockFullAccess
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -783,6 +805,14 @@ Resources:
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python310:20
 
@@ -821,9 +851,6 @@ Resources:
       Policy: !Sub >-
         {"Rules":[{"ResourceType":"collection","Resource":["collection/${CollectionName}"]}],"AWSOwnedKey":true}
 
-
-
-
   Collection:
     Type: 'AWS::OpenSearchServerless::Collection'
     Properties:
@@ -851,8 +878,22 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - !Ref KnowledgeBaseRolePolicy
-        # it looks like it needs some permission i don't know so at the moment deploy with admin
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+      Policies:
+        - PolicyName: BedrockKnowledgeBasePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${KnowledgeBaseBucket}'
+                  - !Sub 'arn:aws:s3:::${KnowledgeBaseBucket}/*'
+              - Effect: Allow
+                Action:
+                  - 'bedrock:*'
+                Resource: '*'
 
   KnowledgeBaseRolePolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -943,7 +984,39 @@ Resources:
               - 'sts:AssumeRole'
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AdministratorAccess
+      Policies:
+        - PolicyName: OpenSearchPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'opensearchserverless:BatchGetCollection'
+                  - 'opensearchserverless:ListCollections'
+                  - 'opensearchserverless:BatchGetVpcEndpoint'
+                  - 'opensearchserverless:ListVpcEndpoints'
+                  - 'opensearchserverless:CreateSecurityPolicy'
+                  - 'opensearchserverless:GetSecurityPolicy'
+                  - 'opensearchserverless:UpdateSecurityPolicy'
+                  - 'opensearchserverless:ListSecurityPolicies'
+                  - 'opensearchserverless:CreateAccessPolicy'
+                  - 'opensearchserverless:GetAccessPolicy'
+                  - 'opensearchserverless:UpdateAccessPolicy'
+                  - 'opensearchserverless:ListAccessPolicies'
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - 'aoss:APIAccessAll'
+                Resource: !GetAtt Collection.Arn
+        - PolicyName: BedrockPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'bedrock:InvokeModel'
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
 
   VectorIndex:
     Type: AWS::CloudFormation::CustomResource
