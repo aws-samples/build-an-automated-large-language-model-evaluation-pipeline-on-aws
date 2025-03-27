@@ -42,7 +42,11 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         # TODO narrow down
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess'
+        - 'arn:aws:iam::aws:policy/service-role/AmazonSageMakerServiceCatalogProductsExecutionRole'
+          # - 'arn:aws:iam::aws:policy/AdministratorAccess'
   # A role for the containers
   TaskRole:
     Type: AWS::IAM::Role
@@ -55,17 +59,18 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: 'sts:AssumeRole'
       Policies:
-        - PolicyName: "SageMakerInvokePermissions"
+        - PolicyName: S3Access
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: '2012-10-17'
             Statement:
-              - Effect: "Allow"
+              - Effect: Allow
                 Action:
-                  - "sagemaker:InvokeEndpoint"
-                  - "s3:*"
-                  - "dynamodb:GetItem"
-                  - "bedrock:*"
-                Resource: "*"
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                  - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   EvaluationBucket:
     Type: 'AWS::S3::Bucket'
@@ -93,8 +98,16 @@ Resources:
               - Effect: Allow
                 Action:
                   - "lambda:InvokeFunction"
-                # TODO: narrow down
-                Resource: "*"
+                Resource:
+                  - !GetAtt InvokeLLM.Arn
+                  - !GetAtt ConvertToJson.Arn
+                  - !GetAtt InvokeResultSummary.Arn
+                  - !GetAtt EvaluateLLM.Arn
+                  - !GetAtt ValidateLLMEvaluateInput.Arn
+                  - !GetAtt FMEvalValidationInput.Arn
+                  - !GetAtt EvaluateMetric.Arn
+                  - !GetAtt REGASLambdaEvaluation.Arn
+                  - !GetAtt REGASLambdaEvaluationPreprocess.Arn
         - PolicyName: StatesLogPolicy
           PolicyDocument:
             Version: "2012-10-17"
@@ -121,6 +134,7 @@ Resources:
                   - s3:*Object
                 Resource:
                   - !Sub  "arn:aws:s3:::${EvaluationBucket}/*"
+
   InvokeLLMStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
@@ -260,8 +274,6 @@ Resources:
               Service:
                 - !Sub states.${AWS::Region}.amazonaws.com
             Action: "sts:AssumeRole"
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
       Path: "/"
       Policies:
         - PolicyName: LambdaExecutionPolicy
@@ -271,8 +283,18 @@ Resources:
               - Effect: Allow
                 Action:
                   - "lambda:InvokeFunction"
-                  - "states:*"
-                  - "iam:*"
+                Resource:
+                  - !GetAtt EvaluateLLM.Arn
+                  - !GetAtt ValidateLLMEvaluateInput.Arn
+                  - !GetAtt FMEvalValidationInput.Arn
+                  - !GetAtt EvaluateMetric.Arn
+                  - !GetAtt REGASLambdaEvaluation.Arn
+                  - !GetAtt REGASLambdaEvaluationPreprocess.Arn
+              - Effect: Allow
+                Action:
+                  - "states:StartExecution"
+                  - "states:DescribeExecution"
+                  - "states:StopExecution"
                 Resource: "*"
         - PolicyName: StatesLogPolicy
           PolicyDocument:
@@ -290,10 +312,15 @@ Resources:
                   - logs:DescribeResourcePolicies
                   - logs:DescribeLogGroups
                   - logs:CreateLogGroup
-                Resource: "*"
+                Resource: 
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-LLM*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-LLMEval*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-FMEval*:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/states/Evaluate-RAGASEval*:*"
 
   EvaluateLLMStateMachine:
     Type: AWS::StepFunctions::StateMachine
+    DependsOn: [LLMEvalStateMachine, FMEvalStateMachine, EvaluateLLMStateMachineRAGAS]
     Properties:
       StateMachineName: Evaluate-LLM
       DefinitionString:
@@ -313,7 +340,7 @@ Resources:
                           "Type": "Task",
                           "Resource": "arn:aws:states:::states:startExecution.sync:2",
                           "Parameters": {
-                            "StateMachineArn": "${RAGASEvalStepFunctionsArn}",
+                            "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-RAGASEval",
                             "Input.$": "$"
                           },
                           "End": true
@@ -327,7 +354,7 @@ Resources:
                           "Type": "Task",
                           "Resource": "arn:aws:states:::states:startExecution.sync:2",
                           "Parameters": {
-                            "StateMachineArn": "${LLMEvalStepFunctionsArn}",
+                            "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-LLMEval",
                             "Input.$": "$"
                           },
                           "End": true
@@ -341,7 +368,7 @@ Resources:
                           "Type": "Task",
                           "Resource": "arn:aws:states:::states:startExecution.sync:2",
                           "Parameters": {
-                            "StateMachineArn": "${FMEvalStepFunctionsArn}",
+                            "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-FMEval",
                             "Input.$": "$"
                           },
                           "End": true
@@ -353,12 +380,9 @@ Resources:
                 }
               }
             }
-          - {
-            LLMEvalStepFunctionsArn: !GetAtt LLMEvalStateMachine.Arn,
-            FMEvalStepFunctionsArn: !GetAtt FMEvalStateMachine.Arn,
-            RAGASEvalStepFunctionsArn: !GetAtt EvaluateLLMStateMachineRAGAS.Arn
-          }
+          - {}
       RoleArn: !GetAtt LLMIEvaluationStatesExecutionRole.Arn
+
   InvokeLLM:
     Type: AWS::Serverless::Function
     Properties:
@@ -384,11 +408,24 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
-                - sagemaker:*
-              Resource: "*"
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sagemaker:InvokeEndpoint
+              Resource: '*'
+
   InvokeResultSummary:
     Type: AWS::Serverless::Function
     Properties:
@@ -409,9 +446,12 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-              Resource: "*"
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   EvaluateLLM:
     Type: AWS::Serverless::Function
@@ -439,19 +479,41 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
-                - sagemaker:*
                 - dynamodb:GetItem
                 - dynamodb:Query
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sagemaker:InvokeEndpoint
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
-              Resource: "*"
-
+              Resource: 
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${ResultDatabase}'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${ResultDatabase}/*'
 
   EvaluateMetric:
     Type: AWS::Serverless::Function
@@ -475,13 +537,28 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
-                - sagemaker:*
                 - dynamodb:GetItem
                 - dynamodb:Query
-              Resource: "*"
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sagemaker:CreateTrainingJob
+                - sagemaker:DescribeTrainingJob
+              Resource: !Sub 'arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:training-job/*'
 
   ConvertToJson:
     Type: AWS::Serverless::Function
@@ -496,13 +573,6 @@ Resources:
         - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python310:20
       Policies:
         - AWSLambdaExecute
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                # TODO narrow down
-                - logs:*
-              Resource: "*"
 
   ValidateLLMEvaluateInput:
     Type: AWS::Serverless::Function
@@ -519,11 +589,18 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
                 - dynamodb:GetItem
                 - dynamodb:Query
-              Resource: "*"
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   FMEvalValidationInput:
     Type: AWS::Serverless::Function
@@ -540,11 +617,18 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
                 - dynamodb:GetItem
                 - dynamodb:Query
-              Resource: "*"
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
 
   EvaluationResultSummary:
     Type: AWS::Serverless::Function
@@ -567,14 +651,23 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+            - Effect: Allow
+              Action:
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
-              Resource: "*"
+              Resource: 
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${ResultDatabase}'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${ResultDatabase}/*'
 
   RESTAPIStartSF:
     Type: AWS::Serverless::Api
@@ -589,6 +682,7 @@ Resources:
 
   RESTAPIStartSFLambda:
     Type: AWS::Serverless::Function
+    DependsOn: [InvokeLLMStateMachine, EvaluateLLMStateMachine]
     Properties:
       FunctionName: llm_eval_solution_start_sf
       Handler: start_sf.lambda_handler
@@ -598,8 +692,8 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
-          INVOKE_STATE_MACHINE_ARN: !Ref InvokeLLMStateMachine
-          EVALUATE_STATE_MACHINE_ARN: !Ref EvaluateLLMStateMachine
+          INVOKE_STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Invoke-LLM"
+          EVALUATE_STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-LLM"
       Policies:
         - AWSLambdaExecute
         - Version: '2012-10-17'
@@ -608,8 +702,8 @@ Resources:
               Action:
                 - states:StartExecution
               Resource:
-                - !Ref InvokeLLMStateMachine
-                - !Ref EvaluateLLMStateMachine
+                - !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Invoke-LLM"
+                - !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:Evaluate-LLM"
       Events:
         ApiEvent:
           Type: Api
@@ -639,6 +733,7 @@ Resources:
         ReadCapacityUnits: "5"
         WriteCapacityUnits: "5"
       TableName: "SolutionTableDDB"
+
 
   ResultDatabase:
     Type: AWS::Glue::Database
@@ -670,7 +765,6 @@ Resources:
           KB_ID: !Ref KnowledgeBaseWithAoss
       Policies:
         - AWSLambdaBasicExecutionRole
-        - AmazonS3FullAccess
         - AmazonBedrockFullAccess
         - Version: '2012-10-17'
           Statement:
@@ -682,6 +776,17 @@ Resources:
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+                - s3:HeadObject
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}'
+                - !Sub 'arn:aws:s3:::eval-${AWS::AccountId}-${AWS::Region}/*'
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python310:20
 
@@ -705,8 +810,6 @@ Resources:
           KB_ID: !Ref KnowledgeBaseWithAoss
       Policies:
         - AWSLambdaBasicExecutionRole
-        - AmazonS3FullAccess
-        - AmazonBedrockFullAccess
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -717,6 +820,14 @@ Resources:
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python310:20
 
@@ -755,9 +866,6 @@ Resources:
       Policy: !Sub >-
         {"Rules":[{"ResourceType":"collection","Resource":["collection/${CollectionName}"]}],"AWSOwnedKey":true}
 
-
-
-
   Collection:
     Type: 'AWS::OpenSearchServerless::Collection'
     Properties:
@@ -785,8 +893,22 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - !Ref KnowledgeBaseRolePolicy
-        # it looks like it needs some permission i don't know so at the moment deploy with admin
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+      Policies:
+        - PolicyName: BedrockKnowledgeBasePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${KnowledgeBaseBucket}'
+                  - !Sub 'arn:aws:s3:::${KnowledgeBaseBucket}/*'
+              - Effect: Allow
+                Action:
+                  - 'bedrock:*'
+                Resource: '*'
 
   KnowledgeBaseRolePolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -877,7 +999,39 @@ Resources:
               - 'sts:AssumeRole'
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AdministratorAccess
+      Policies:
+        - PolicyName: OpenSearchPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'opensearchserverless:BatchGetCollection'
+                  - 'opensearchserverless:ListCollections'
+                  - 'opensearchserverless:BatchGetVpcEndpoint'
+                  - 'opensearchserverless:ListVpcEndpoints'
+                  - 'opensearchserverless:CreateSecurityPolicy'
+                  - 'opensearchserverless:GetSecurityPolicy'
+                  - 'opensearchserverless:UpdateSecurityPolicy'
+                  - 'opensearchserverless:ListSecurityPolicies'
+                  - 'opensearchserverless:CreateAccessPolicy'
+                  - 'opensearchserverless:GetAccessPolicy'
+                  - 'opensearchserverless:UpdateAccessPolicy'
+                  - 'opensearchserverless:ListAccessPolicies'
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - 'aoss:APIAccessAll'
+                Resource: !GetAtt Collection.Arn
+        - PolicyName: BedrockPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'bedrock:InvokeModel'
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
 
   VectorIndex:
     Type: AWS::CloudFormation::CustomResource
@@ -1157,17 +1311,34 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                # TODO narrow down
-                - s3:*
-                - bedrock:*
                 - dynamodb:GetItem
                 - dynamodb:Query
+              Resource: !GetAtt SolutionTableDDB.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}'
+                - !Sub 'arn:aws:s3:::${EvaluationBucket}/*'
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - glue:GetTable
                 - glue:GetDatabase
                 - glue:CreateTable
                 - glue:UpdateTable
                 - glue:BatchCreatePartition
-              Resource: "*"
+              Resource:
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${ResultDatabase}'
+                - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${ResultDatabase}/*'
 
 
 Outputs:
