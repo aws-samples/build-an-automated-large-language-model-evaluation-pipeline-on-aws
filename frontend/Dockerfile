@@ -1,7 +1,7 @@
 FROM node:18.20
 
 # Create non-root user and group
-RUN groupadd -r appuser && useradd -r -g -m appuser appuser
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
 
 WORKDIR /app
 
