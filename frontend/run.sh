@@ -14,7 +14,7 @@ case $input in
     local)
         echo "Running the app locally..."
         docker build -t eval-app:latest .
-	    docker run -d --name eval-app -p 3000:3000 -p 5000:5000 -v ~/.aws:/root/.aws eval-app
+	docker run -d --name eval-app -p 3000:3000 -p 5000:5000 -v ~/.aws:/home/appuser/.aws eval-app
         ;;
     deploy)
         echo "Deploying the app. This might take a few minutes..."

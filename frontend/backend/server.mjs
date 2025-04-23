@@ -83,7 +83,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 });
 
 app.get("/models", async (req, res) => {
-  console.log("RECEIVING REQUESTS");
   const region = req.query.region;
 
   const client = new BedrockClient({
