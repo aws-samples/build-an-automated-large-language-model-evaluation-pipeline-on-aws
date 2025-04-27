@@ -132,15 +132,6 @@ KNOWLEDGE_BASE_DATA_SOURCE=$(aws cloudformation describe-stacks --stack-name llm
 echo "KnowledgeBaseDataSource: $KNOWLEDGE_BASE_DATA_SOURCE"
 
 # Get the approximate number of items in the table
-ITEM_COUNT=$(aws dynamodb describe-table --table-name SolutionTableDDB | jq .Table.ItemCount)
-
-# Check if table is empty
-if [ "$ITEM_COUNT" -eq "0" ]; then
-  echo "Table SolutionTableDDB is empty... ingesting data"
-  aws dynamodb batch-write-item --request-items file://data.json
-else
-  echo "Table SolutionTableDDB already contains $ITEM_COUNT items"
-fi
 
 ITEM_COUNT=$(aws dynamodb describe-table --table-name SolutionTableDDB | jq .Table.ItemCount)
 
